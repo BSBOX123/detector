@@ -5,21 +5,19 @@ from konlpy.tag import Okt
 from sklearn.feature_extraction.text import TfidfVectorizer
 import os
 import pickle
-# from dotenv import load_dotenv # 모델 학습에서는 API 키를 직접 사용하지 않으므로 불필요
 
 # --- 설정 ---
 # 이 파일(model_trainer.py)이 있는 디렉토리 경로
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 학습에 사용할 CSV 파일의 전체 경로 (news_API\articles 폴더에 있는 파일)
-# 이 경로를 정확하게 확인하고 필요하면 수정해주세요!
+# 학습에 사용할 CSV 파일의 전체 경로 
 CSV_FILE_PATH = r'E:\workspace\News_API\articles\dataset_2025-09-28_16-07-47.csv' 
 
 # 분석할 텍스트가 담긴 열(column)의 이름
 TEXT_COLUMN_NAME = '기사본문'
 # 진위여부 라벨이 담긴 열(column)의 이름 (1:진짜, 0:가짜)
 LABEL_COLUMN_NAME = '진위여부(1:진짜, 0:가짜)' 
-# 학습된 가중치를 저장할 파일명 (tokken 폴더 안에 저장됩니다)
+# 학습된 가중치를 저장할 파일명 (tokken 폴더 안에 저장)
 OUTPUT_WEIGHTS_FILE = os.path.join(BASE_DIR, 'fake_news_keyword_weights.pkl')
 # 추출할 상위 키워드 개수
 TOP_N_KEYWORDS = 100
@@ -34,8 +32,8 @@ def preprocess_and_extract_nouns(text):
 
 def train_and_save_weights():
     """
-    CSV 데이터를 로드하여 TF-IDF 모델을 학습하고,
-    가짜뉴스 키워드 가중치를 파일로 저장합니다.
+    CSV 데이터를 로드하여 TF-IDF 모델학습,
+    가짜뉴스 키워드 가중치를 파일로 저장.
     """
     print(f"--- 1. 학습 데이터 로드: '{CSV_FILE_PATH}' ---")
     if not os.path.exists(CSV_FILE_PATH):

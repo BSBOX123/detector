@@ -5,12 +5,12 @@ from dotenv import load_dotenv
 
 # 현재 config.py 파일이 있는 디렉토리
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-# News_API 폴더의 부모 디렉토리, 즉 E:\workspace 경로
+# News_API 폴더의 부모 디렉토리
 ROOT_DIR = os.path.join(CURRENT_DIR, '..')
 # .env 파일의 절대 경로
 DOTENV_PATH = os.path.join(ROOT_DIR, '.env')
 
-# .env 파일을 로드할 때 정확한 경로를 명시합니다.
+# .env 파일을 로드할 때 정확한 경로를 명시
 if os.path.exists(DOTENV_PATH):
     load_dotenv(dotenv_path=DOTENV_PATH)
 else:
@@ -25,7 +25,7 @@ class Config:
     QUERY = os.getenv('NEWS_QUERY', '정부 OR 경제 OR 사회 OR IT OR 과학 OR 문화')
     LANGUAGE = os.getenv('NEWS_LANGUAGE', 'ko')
 
-    # *** 핵심 수정: .env의 'None' 문자열을 실제 None 객체로 변환 ***
+    # .env의 'None' 문자열을 실제 None 객체로 변환 ***
     _sources_from_env = os.getenv('NEWS_SOURCES')
     SOURCES = _sources_from_env if _sources_from_env and _sources_from_env.lower() != 'none' else None
 

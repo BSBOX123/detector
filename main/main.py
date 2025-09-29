@@ -5,7 +5,7 @@ import os
 import subprocess
 
 # --- 설정: 각 기능별 모듈 및 스크립트 경로 ---
-# 현재 main.py 파일이 있는 디렉토리의 부모 디렉토리 (E:\workspace)
+# 현재 main.py 파일이 있는 디렉토리의 부모 디렉토리 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # 각 스크립트의 절대 경로
@@ -14,13 +14,13 @@ JUDGER_RUNNER_SCRIPT = os.path.join(BASE_DIR, 'model', 'tokken', 'run_judgement.
 
 def run_module_as_script(module_path, script_name):
     """지정된 모듈을 스크립트처럼 실행하는 헬퍼 함수 (e.g., python -m News_API.main)"""
-    print(f"\n--- 🚀 '{script_name}' 작업을 시작합니다 ---")
+    print(f"\n--- '{script_name}' 작업을 시작합니다 ---")
     try:
         # sys.executable은 현재 파이썬 인터프리터 경로
         # '-m' 플래그는 모듈을 스크립트로 실행
         # cwd를 프로젝트의 최상위 폴더(workspace)로 설정하여 모듈 경로를 찾을 수 있도록 함
         subprocess.run([sys.executable, '-m', module_path], check=True, text=True, cwd=BASE_DIR)
-        print(f"--- ✅ '{script_name}' 작업이 성공적으로 완료되었습니다 ---")
+        print(f"--- '{script_name}' 작업이 성공적으로 완료되었습니다 ---")
     except subprocess.CalledProcessError as e:
         print(f"\n[오류] '{script_name}' 작업 실행 중 오류가 발생했습니다: {e}")
     except Exception as e:
@@ -31,11 +31,11 @@ def run_simple_script(script_path, script_name):
     if not os.path.exists(script_path):
         print(f"\n[오류] 스크립트 파일을 찾을 수 없습니다: {script_path}")
         return
-    print(f"\n--- 🚀 '{script_name}' 작업을 시작합니다 ---")
+    print(f"\n--- '{script_name}' 작업을 시작합니다 ---")
     try:
         script_dir = os.path.dirname(script_path)
         subprocess.run([sys.executable, script_path], check=True, text=True, cwd=script_dir)
-        print(f"--- ✅ '{script_name}' 작업이 성공적으로 완료되었습니다 ---")
+        print(f"--- '{script_name}' 작업이 성공적으로 완료되었습니다 ---")
     except subprocess.CalledProcessError as e:
         print(f"\n[오류] '{script_name}' 작업 실행 중 오류가 발생했습니다: {e}")
     except Exception as e:

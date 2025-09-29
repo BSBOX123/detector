@@ -7,7 +7,7 @@ import os
 # --- 설정 ---
 # 이 파일(news_judger.py)이 있는 디렉토리 경로
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# 학습된 가중치 파일명 (tokken 폴더 안에 저장됩니다)
+# 학습된 가중치 파일
 WEIGHTS_FILE = os.path.join(BASE_DIR, 'fake_news_keyword_weights.pkl')
 
 # 가짜뉴스 판단 임계값 (이 점수 이상이면 '가짜 뉴스'로 판단)
@@ -20,11 +20,11 @@ fake_news_weights = None
 # --- 함수 정의 ---
 def load_weights():
     """
-    저장된 가중치 파일을 불러와 전역 변수에 저장합니다.
+    저장된 가중치 파일을 불러와 전역 변수에 저장.
     """
     global fake_news_weights
     if not os.path.exists(WEIGHTS_FILE):
-        raise FileNotFoundError(f"[오류] 가중치 파일('{WEIGHTS_FILE}')을 찾을 수 없습니다. 'E:\\workspace\\model\\tokken' 폴더에서 model_trainer.py를 먼저 실행하여 모델을 학습시켜주세요.")
+        raise FileNotFoundError(f"[오류] 가중치 파일('{WEIGHTS_FILE}')을 찾을 수 없습니다. '\workspace\\model\\tokken' 폴더에서 model_trainer.py를 먼저 실행하여 모델을 학습시켜주세요.")
     
     with open(WEIGHTS_FILE, 'rb') as f:
         fake_news_weights = pickle.load(f)
@@ -41,7 +41,7 @@ def _preprocess(text):
 
 def judge_article(news_text):
     """
-    새로운 뉴스 텍스트를 받아 가짜뉴스 점수를 계산하고 판단 결과를 반환합니다.
+    새로운 뉴스 텍스트를 받아 가짜뉴스 점수를 계산하고 판단 결과를 반환.
     """
     global fake_news_weights # 전역 변수임을 명시
     if fake_news_weights is None:
