@@ -5,6 +5,7 @@ from konlpy.tag import Okt
 from sklearn.feature_extraction.text import TfidfVectorizer
 import os
 import pickle
+# from dotenv import load_dotenv # 모델 학습에서는 API 키를 직접 사용하지 않으므로 불필요
 
 # --- 설정 ---
 # 이 파일(model_trainer.py)이 있는 디렉토리 경로

@@ -3,7 +3,7 @@
 from news_judger import judge_article
 
 def main():
-    print("--- 📰 가짜뉴스 판별기를 시작합니다 ---")
+    print("--- 가짜뉴스 판별기를 시작합니다 ---")
     print("분석할 뉴스 기사 본문을 입력해주세요 (종료하려면 'exit' 입력)")
 
     while True:
@@ -21,7 +21,7 @@ def main():
         try:
             result = judge_article(news_text)
             
-            print("\n--- 📝 뉴스 판별 결과 ---")
+            print("\n--- 뉴스 판별 결과 ---")
             print(f"가짜뉴스 점수: {result['score']} / 100")
             print(f"판단: {result['judgement']} (기준 점수: {result['threshold']}점)")
             

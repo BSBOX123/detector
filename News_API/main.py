@@ -1,14 +1,19 @@
-# main.py
+# E:\workspace\News_API\main.py
 
 import time
-import config
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from api_handler import fetch_articles, generate_fake_version 
-from crawler import crawl_article_text
-from file_saver import save_articles_to_csv
+from tqdm import tqdm
+
+# 상대 경로로 모듈 임포트
+from .config import config
+from .api_handler import fetch_articles, generate_fake_version
+from .crawler import crawl_article_text
+from .file_saver import save_articles_to_csv
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def process_article(article):
-    "하나의 진짜 기사로 '진짜'와 '가짜' 데이터 쌍(2개) 생성"
     url = article.get('url', '')
     original_title = article.get('title', '')
     source_name = article.get('source', {}).get('name', '')
@@ -16,65 +21,69 @@ def process_article(article):
 
     real_text = crawl_article_text(url)
     
-    # '진짜' 데이터 레코드 (라벨 1)
     record_real = {
-        'title': original_title,
-        'source': source_name,
-        'url': url,
-        'publishedAt': published_at,
-        'text': real_text,
-        'label': 1  # 진짜 뉴스는 1
+        'title': original_title, 'source': source_name, 'url': url,
+        'publishedAt': published_at, 'text': real_text, 'label': 1
     }
 
-    # '가짜' 데이터 레코드 생성 (라벨 0)
     fake_text = generate_fake_version(real_text)
     record_fake = {
-        'title': "[가짜생성] " + original_title, # 제목으로 구분
-        'source': source_name,
-        'url': url,
-        'publishedAt': published_at,
-        'text': fake_text,
-        'label': 0  # 가짜 뉴스는 0
+        'title': "[가짜생성] " + original_title, 'source': source_name, 'url': url,
+        'publishedAt': published_at, 'text': fake_text, 'label': 0
     }
     
-    # 두 개의 레코드를 리스트로 반환
     return [record_real, record_fake]
 
 def main():
-    """메인 실행 함수"""
-    print("학습용 뉴스 데이터셋 구축을 시작합니다...")
+    logging.info("학습용 뉴스 데이터셋 구축을 시작합니다...")
+    
+    if not config.NEWS_API_KEY or config.NEWS_API_KEY == 'YOUR_NEWS_API_KEY_DEFAULT':
+        logging.critical("NEWS_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
+        return
+    if not config.GEMINI_API_KEY or config.GEMINI_API_KEY == 'YOUR_GEMINI_API_KEY_DEFAULT':
+        logging.critical("GEMINI_API_KEY가 설정되지 않았습니다. .env 파일을 확인하세요.")
+        return
+
     try:
         articles = fetch_articles(
             config.QUERY, config.LANGUAGE, config.SOURCES, config.SORT_BY, config.PAGE_SIZE
         )
-        print(f"총 {len(articles)}개의 원본 기사를 가져왔습니다. (데이터 2배 생성 예정)")
+        if not articles:
+            logging.warning("News API에서 가져온 기사가 없습니다.")
+            return
+
+        logging.info(f"총 {len(articles)}개의 원본 기사를 가져왔습니다. (데이터 2배 생성 예정)")
 
         processed_articles = []
         batches = [articles[i:i + config.BATCH_SIZE] for i in range(0, len(articles), config.BATCH_SIZE)]
 
-        for i, batch in enumerate(batches):
-            print(f"\n--- 배치 {i+1}/{len(batches)} 처리 시작 ({len(batch)}개) ---")
+        for i, batch in enumerate(tqdm(batches, desc="뉴스 배치 처리 중", unit="batch")):
+            logging.info(f"--- 배치 {i+1}/{len(batches)} 처리 시작 ({len(batch)}개) ---")
             
             with ThreadPoolExecutor(max_workers=10) as executor:
                 future_to_article = {executor.submit(process_article, article): article for article in batch}
                 
                 for future in as_completed(future_to_article):
                     try:
-                        # [record_real, record_fake] 리스트를 한 번에 추가
-                        processed_articles.extend(future.result()) 
-                        print(f"  - 진짜/가짜 쌍 처리 완료: {future.result()[0]['title'][:30]}...")
+                        processed_articles.extend(future.result())
                     except Exception as e:
-                        print(f"[Error] 기사 처리 중 예외 발생: {e}")
+                        logging.error(f"[Error] 기사 처리 중 예외 발생: {e}", exc_info=True)
 
             if i < len(batches) - 1:
-                print(f"--- 배치 {i+1} 처리 완료. 61초간 대기합니다... ---")
-                time.sleep(61)
+                logging.info(f"--- 배치 {i+1} 처리 완료. {config.BATCH_DELAY_SECONDS}초간 대기...")
+                time.sleep(config.BATCH_DELAY_SECONDS)
 
-        processed_articles.sort(key=lambda x: x['publishedAt'], reverse=True)
-        save_articles_to_csv(processed_articles, config.QUERY, config.SAVE_FOLDER_PATH)
+        processed_articles.sort(key=lambda x: x.get('publishedAt', ''), reverse=True)
+        
+        if processed_articles:
+            save_articles_to_csv(processed_articles, config.QUERY, config.SAVE_FOLDER_PATH)
+        else:
+            logging.warning("처리된 기사가 없어 CSV 파일을 저장하지 않습니다.")
+
+        logging.info("학습용 뉴스 데이터셋 구축이 성공적으로 완료되었습니다.")
 
     except Exception as e:
-        print(f"프로세스 실행 중 심각한 오류 발생: {e}")
+        logging.critical(f"프로세스 실행 중 치명적인 오류 발생: {e}", exc_info=True)
 
 if __name__ == '__main__':
     main()
