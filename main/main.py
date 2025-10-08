@@ -24,10 +24,44 @@ COLLECTOR_SCRIPT = os.path.join(BASE_DIR, 'News_API', 'main.py')
 TRAINER_SCRIPT = os.path.join(BASE_DIR, 'model', 'tokken', 'model_trainer.py')
 JUDGER_RUNNER_SCRIPT = os.path.join(BASE_DIR, 'model', 'tokken', 'run_judgement.py')
 ARTICLES_PATH = os.path.join(BASE_DIR, 'News_API', 'articles')
+SPLITTER_SCRIPT = os.path.join(BASE_DIR, 'util', 'data_splitter.py')
 
 # ==========================================================
 #  헬퍼 함수 정의 (if __name__ == '__main__' 보다 위에 위치)
 # ==========================================================
+
+def run_splitter_with_selection():
+    """사용자에게 데이터셋을 선택받아 분할 스크립트를 실행합니다."""
+    if not dataset_manager: return
+
+    datasets = dataset_manager.get_datasets()
+    # 이미 분할된 _train.csv, _test.csv 파일은 목록에서 제외
+    datasets = [f for f in datasets if '_train.csv' not in f and '_test.csv' not in f]
+    
+    if not datasets:
+        print("\n[알림] 분할할 데이터셋이 없습니다.")
+        return
+        
+    dataset_manager.display_datasets(datasets)
+    
+    try:
+        choice_str = input("분할할 데이터셋 번호를 입력하세요 (취소: Enter): ")
+        if not choice_str:
+            print("데이터셋 분할을 취소했습니다.")
+            return
+        choice_idx = int(choice_str) - 1
+        
+        if 0 <= choice_idx < len(datasets):
+            selected_file = datasets[choice_idx]
+            selected_filepath = os.path.join(ARTICLES_PATH, selected_file)
+            
+            print(f"\n--- 🚀 '데이터셋 분할' 작업을 시작합니다 ({selected_file}) ---")
+            subprocess.run([sys.executable, SPLITTER_SCRIPT, '--file', selected_filepath], check=True, text=True)
+            print(f"--- ✅ '데이터셋 분할' 작업이 성공적으로 완료되었습니다 ---")
+        else:
+            print("[오류] 잘못된 번호를 입력했습니다.")
+    except (ValueError, subprocess.CalledProcessError, Exception) as e:
+        print(f"\n[오류] 작업 실행 중 오류가 발생했습니다: {e}")
 
 def run_module_as_script(module_path, script_name):
     """지정된 모듈을 스크립트처럼 실행하는 헬퍼 함수 (e.g., python -m News_API.main)"""
@@ -140,23 +174,24 @@ if __name__ == '__main__':
         print("  1: 뉴스 데이터 수집 및 가공")
         print("  2: 모델 학습")
         print("  3: 가짜뉴스 판별기 실행")
-        print("  4: 데이터셋 관리")
+        print("  4: 데이터셋 관리 (병합/삭제)")
+        print("  5: 데이터셋 분할 (학습/평가용)") # 메뉴 추가
         print("  q: 종료")
-        choice = input("선택 (1, 2, 3, 4, q): ")
+        choice = input("선택 (1, 2, 3, 4, 5, q): ")
         print("#"*60)
         
         if choice == '1':
-            # News_API/main.py를 모듈로 실행
             run_module_as_script('News_API.main', "뉴스 데이터 수집 및 가공")
         elif choice == '2':
             run_trainer_with_selection()
         elif choice == '3':
-            # run_judgement.py는 독립 실행 가능
             run_simple_script(JUDGER_RUNNER_SCRIPT, "가짜뉴스 판별기")
         elif choice == '4':
             manage_datasets()
+        elif choice == '5': # 메뉴 연결
+            run_splitter_with_selection()
         elif choice.lower() == 'q':
             print("프로그램을 종료합니다.")
             break
         else:
-            print("잘못된 입력입니다. 다시 선택해주세요.")
+            print("잘못된 입력입니다.")

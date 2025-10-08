@@ -22,7 +22,14 @@ class Config:
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_GEMINI_API_KEY_DEFAULT')
 
     # News API Parameters
-    QUERY = os.getenv('NEWS_QUERY', '정부 OR 경제 OR 사회 OR IT OR 과학 OR 문화')
+    QUERIES = [
+        '정치', '선거', '국회',             # 정치
+        '경제', '금리', '부동산', '주식',   # 경제
+        '사회', '사건사고', '노동',         # 사회
+        'IT', 'AI', '반도체', '플랫폼',    # IT/기술
+        '과학', '우주', '기후변화',         # 과학
+        '문화', '영화', '음악', '미술'      # 문화
+    ]
     LANGUAGE = os.getenv('NEWS_LANGUAGE', 'ko')
 
     # .env의 'None' 문자열을 실제 None 객체로 변환 ***
