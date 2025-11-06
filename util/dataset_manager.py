@@ -62,7 +62,7 @@ def merge_datasets(selected_indices, file_list):
     
     # 병합된 파일 저장
     timestamp = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-    new_filename = f"merged_dataset_{timestamp}.csv"
+    new_filename = f"dataset_merged_{timestamp}.csv"
     new_filepath = os.path.join(ARTICLES_PATH, new_filename)
     
     try:
