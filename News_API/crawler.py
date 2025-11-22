@@ -44,6 +44,7 @@ def crawl_article(url):
         page.raise_for_status()
         soup = BeautifulSoup(page.text, 'html.parser')
 
+        # --- 1. 본문 찾기 ---
         domain = urlparse(url).netloc
         selectors_to_try = SITE_SPECIFIC_SELECTORS.get(domain, []) + GENERAL_SELECTORS
         
@@ -59,9 +60,11 @@ def crawl_article(url):
                 tag.decompose()
             article_text = content_body.get_text(strip=True, separator=' ')
         else:
+            # 최후의 수단으로 p 태그 합치기
             paragraphs = soup.find_all('p')
             article_text = ' '.join([p.get_text(strip=True) for p in paragraphs if p.get_text(strip=True)])
 
+        # --- 2. 기자 이름 찾기 ---
         author_name = '[기자 정보 없음]'
         for selector in AUTHOR_SELECTORS:
             author_element = soup.select_one(selector)

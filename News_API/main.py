@@ -5,10 +5,8 @@ import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
-# 상대 경로로 모듈 임포트
-# --- (핵심 수정 3) config 객체 하나만 임포트 ---
-from .config import config 
-from .api_handler import fetch_articles, generate_fake_version
+from .config import config
+from .api_handler import fetch_articles
 from .crawler import crawl_article
 from .file_saver import save_raw_real_news, save_feedback_template_csv
 
@@ -30,7 +28,8 @@ def process_article(article):
 
     record_real = {
         'title': original_title, 'source': source_name, 'url': url,
-        'publishedAt': published_at, 'text': real_text, 'author': final_author_name 
+        'publishedAt': published_at, 'text': real_text, 'author': final_author_name,
+        'description': article.get('description', '') # 피드백 템플릿용
     }
     
     return record_real
@@ -44,9 +43,8 @@ def main():
         return
 
     try:
-        all_articles = []
+        all_articles_meta = []
         
-        # --- (핵심 수정 4) config.QUERIES, config.DATE_RANGES_TO_SCAN 등으로 접근 ---
         print(f"총 {len(config.QUERIES)}개 검색어, {len(config.DATE_RANGES_TO_SCAN)}개 날짜 범위, 최대 {config.PAGE_LIMIT}페이지 수집을 시작합니다.")
         
         for query in tqdm(config.QUERIES, desc="전체 카테고리 진행", unit="query"):
@@ -60,24 +58,25 @@ def main():
                         from_date=from_date, to_date=to_date, page=page_num
                     )
                     if articles_per_page:
-                        all_articles.extend(articles_per_page)
+                        all_articles_meta.extend(articles_per_page)
                     else:
                         break 
                     time.sleep(1)
             time.sleep(2)
 
-        unique_articles = list({article['url']: article for article in all_articles}.values())
-        logging.info(f"총 {len(unique_articles)}개의 고유한 원본 기사를 가져왔습니다.")
+        unique_articles_meta = list({article['url']: article for article in all_articles_meta}.values())
+        logging.info(f"총 {len(unique_articles_meta)}개의 고유한 원본 기사를 가져왔습니다.")
 
-        if not unique_articles:
+        if not unique_articles_meta:
             logging.warning("처리할 고유 기사가 없습니다.")
             return
 
-        save_feedback_template_csv(unique_articles, config.SAVE_FOLDER_PATH)
+        # Media 모델 학습을 위한 피드백 템플릿 파일 저장
+        save_feedback_template_csv(unique_articles_meta, config.SAVE_FOLDER_PATH)
 
         logging.info("이제 각 기사의 본문을 크롤링합니다...")
         collected_articles = []
-        batches = [unique_articles[i:i + config.BATCH_SIZE] for i in range(0, len(unique_articles), config.BATCH_SIZE)]
+        batches = [unique_articles_meta[i:i + config.BATCH_SIZE] for i in range(0, len(unique_articles_meta), config.BATCH_SIZE)]
 
         for i, batch in enumerate(tqdm(batches, desc="뉴스 크롤링 처리 중", unit="batch")):
             with ThreadPoolExecutor(max_workers=10) as executor:

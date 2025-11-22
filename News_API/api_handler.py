@@ -2,10 +2,13 @@
 
 import requests
 import google.generativeai as genai
-# config.py에서 'config' 객체를 상대 경로로 import 합니다.
-from .config import config
+from .config import config # config 객체를 상대 경로로 import
 import logging
 import re # 정규표현식(줄바꿈 제거)을 위해 추가
+import time
+# tenacity (재시도 라이브러리) import
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception_type, RetryError
+import google.api_core.exceptions
 
 # Gemini 모델 초기화
 try:
@@ -17,6 +20,19 @@ try:
 except Exception as e:
     logging.error(f"Gemini 모델 설정 중 오류 발생: {e}")
     model = None
+
+# --- News API 호출 ---
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=8),
+    stop=stop_after_attempt(3),
+    retry=retry_if_exception_type(requests.exceptions.RequestException),
+    before_sleep=lambda retry_state: logging.info(f"Retrying News API call in {retry_state.next_action.sleep:.1f}s as it raised {retry_state.outcome.exception()}...")
+)
+def _fetch_articles_with_retry_logic(params):
+    url = 'https://newsapi.org/v2/everything'
+    response = requests.get(url, params=params)
+    response.raise_for_status() # 4xx, 5xx 에러 발생 시 HTTPError 예외 발생
+    return response.json()
 
 "기사 가져오기"
 def fetch_articles(query, language, sources, sort_by, page_size, from_date=None, to_date=None, page=1):
@@ -31,6 +47,7 @@ def fetch_articles(query, language, sources, sort_by, page_size, from_date=None,
         'page': page
     }
     
+    # *** (중요) sources가 유효할 때만 파라미터에 추가 ***
     if sources:
         params['sources'] = sources
     if from_date:
@@ -39,18 +56,42 @@ def fetch_articles(query, language, sources, sort_by, page_size, from_date=None,
         params['to'] = to_date
 
     try:
-        response = requests.get(url, params=params)
-        response.raise_for_status()
-        return response.json().get('articles', [])
-    except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 426 or e.response.status_code == 400:
-             logging.warning(f"[News API 경고] {e.response.status_code} - {e.response.json().get('message')}")
-        else:
-             logging.error(f"[News API 오류] HTTPError 발생. Status: {e.response.status_code}. 서버 응답: {e.response.text}")
+        data = _fetch_articles_with_retry_logic(params)
+        return data.get('articles', [])
+    except RetryError as e:
+        underlying_exception = e.last_attempt.exception
+        if isinstance(underlying_exception, requests.exceptions.HTTPError):
+            logging.error(f"[News API 오류] HTTPError 발생. Status: {underlying_exception.response.status_code}. 서버 응답: {underlying_exception.response.text}")
+        logging.error(f"[News API 오류] News API 호출 최종 실패: {e}")
         return []
-    except requests.exceptions.RequestException as e:
-        logging.error(f"[News API 오류] News API 호출 실패: {e}")
+    except Exception as e:
+        logging.error(f"[News API 오류] News API 호출 중 예기치 않은 오류: {e}", exc_info=True)
         return []
+
+# --- Gemini API 호출 ---
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=10), 
+    stop=stop_after_attempt(3), 
+    retry=retry_if_exception_type((google.api_core.exceptions.DeadlineExceeded, 
+                                   google.api_core.exceptions.ResourceExhausted,
+                                   ValueError)),
+    before_sleep=lambda retry_state: logging.warning(f"Retrying Gemini API call in {retry_state.next_action.sleep:.1f}s as it raised {retry_state.outcome.exception()}...")
+)
+def _generate_fake_version_with_retry(prompt):
+    """재시도 로직이 적용된 Gemini API 호출 함수"""
+    response = model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(
+            temperature=0.8,
+            max_output_tokens=3072
+        ),
+        request_options={"timeout": 120} # 120초(2분) 타임아웃
+    )
+    
+    if not response.parts:
+        raise ValueError(f"Gemini 응답 실패: Finish Reason: {response.candidates[0].finish_reason.name if response.candidates else 'Unknown'}")
+    
+    return response.text.strip()
 
 
 "'진짜 뉴스를 기반으로 가짜 뉴스 생성 (제목과 본문 분리)"
@@ -62,7 +103,6 @@ def generate_fake_version(real_text):
         return '[가짜뉴스 생성 실패: 원본 본문 없음]', '[가짜뉴스 생성 실패: 원본 본문 없음]'
 
     try:
-        # --- (핵심 수정 1) 프롬프트 수정 ---
         prompt = f"""
         당신은 사실과 허구를 교묘하게 섞어, 그럴듯한 가짜뉴스를 작성하는 AI 저널리스트입니다.
         아래 원본 기사를 기반으로, 매우 자극적이고 선정적인 가짜뉴스 '제목'과 '본문'을 생성해주세요.
@@ -78,58 +118,37 @@ def generate_fake_version(real_text):
         {real_text}
         """
         
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=0.8,
-                max_output_tokens=3072
-            ),
-            request_options={"timeout": 30} # 30초 타임아웃
-        )
+        # 재시도 로직이 적용된 함수 호출
+        raw_text = _generate_fake_version_with_retry(prompt)
         
-        # --- (핵심 수정 2) 응답 파싱 로직 ---
-        if response.parts:
-            raw_text = response.text.strip()
-            fake_title = "[가짜생성] (제목 파싱 실패)" # 기본값
-            fake_body = raw_text # 기본값
-            
-            # 제목과 본문 분리 시도
-            if '## ' in raw_text:
-                try:
-                    # '## '로 시작하는 제목 줄과 나머지 본문으로 분리
-                    parts = raw_text.split('\n', 1) # 첫 번째 줄바꿈에서만 분리
-                    title_line = parts[0].strip()
-                    
-                    if title_line.startswith('## '):
-                        fake_title = title_line.replace('## ', '').strip() # '## ' 제거
-                        fake_body = parts[1].strip() if len(parts) > 1 else "[본문 생성 실패]"
-                    else:
-                        # '## '가 첫 줄에 없으면, 그냥 전체를 본문으로
-                        fake_body = raw_text
-                        
-                except Exception as e:
-                    logging.warning(f"Gemini 응답 파싱 실패 (제목/본문 분리): {e}")
-                    fake_body = raw_text # 실패 시 전체를 본문으로
-            else:
-                # '## ' 마커가 없는 경우 (LLM이 지시를 따르지 않음)
-                logging.warning("Gemini 응답에 '## ' 제목 마커가 없습니다.")
+        fake_title = "[가짜생성] (제목 파싱 실패)"
+        fake_body = raw_text
+        
+        if '## ' in raw_text:
+            try:
+                parts = raw_text.split('\n', 1)
+                title_line = parts[0].strip()
+                if title_line.startswith('## '):
+                    fake_title = title_line.replace('## ', '').strip()
+                    fake_body = parts[1].strip() if len(parts) > 1 else "[본문 생성 실패]"
+                else:
+                    fake_body = raw_text
+            except Exception as e:
+                logging.warning(f"Gemini 응답 파싱 실패 (제목/본문 분리): {e}")
                 fake_body = raw_text
-            
-            # 본문 클린업 (혹시 모를 마커 제거, 줄바꿈을 공백으로)
-            markers_to_remove = ['[서론]', '[본론]', '[결론]', '**[서론]**', '**[본론]**', '**[결론]**', '## ']
-            for marker in markers_to_remove:
-                fake_body = fake_body.replace(marker, '')
-            
-            # 여러 줄바꿈(단락 구분)을 공백 한 칸으로 변경
-            fake_body = re.sub(r'\n+', ' ', fake_body).strip()
-            
-            return fake_title, fake_body
-        
         else:
-            fail_reason = f"[가짜뉴스 생성 실패] Finish Reason: {response.candidates[0].finish_reason.name if response.candidates else 'Unknown'}"
-            return f"[가짜생성] ({fail_reason})", fail_reason
+            logging.warning("Gemini 응답에 '## ' 제목 마커가 없습니다.")
+            fake_body = raw_text
+        
+        markers_to_remove = ['[서론]', '[본론]', '[결론]', '**[서론]**', '**[본론]**', '**[결론]**', '## ']
+        for marker in markers_to_remove:
+            fake_body = fake_body.replace(marker, '')
+        
+        fake_body = re.sub(r'\n+', ' ', fake_body).strip()
+        
+        return fake_title, fake_body
             
-    except Exception as e:
-        logging.error(f"가짜뉴스 생성 API 호출 실패: {e}", exc_info=True)
+    except (RetryError, Exception) as e:
+        logging.error(f"가짜뉴스 생성 API 호출 최종 실패: {e}", exc_info=True)
         fail_reason = f"[가짜뉴스 생성 실패: {e.__class__.__name__}]"
         return f"[가짜생성] ({fail_reason})", fail_reason

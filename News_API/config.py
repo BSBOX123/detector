@@ -2,7 +2,7 @@
 
 import os
 from dotenv import load_dotenv
-from datetime import datetime, timedelta # <--- 날짜 계산을 위해 임포트
+from datetime import datetime, timedelta
 
 # --- .env 파일 로드 ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -14,21 +14,36 @@ if os.path.exists(DOTENV_PATH):
 else:
     print(f"[경고] .env 파일을 찾을 수 없습니다: {DOTENV_PATH}")
 
+# --- 날짜 범위 동적 생성 ---
+# News API는 30일 전까지만 지원합니다.
+# 4주간의 데이터를 1주 단위로 나눕니다.
+today = datetime.now() # 현재 시간 기준
+DATE_RANGES_TO_SCAN = [
+    # 1주차 (오늘 ~ 7일 전)
+    {
+        "from_date": (today - timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%S'),
+        "to_date": today.strftime('%Y-%m-%dT%H:%M:%S')
+    },
+    # 2주차 (8일 전 ~ 14일 전)
+    {
+        "from_date": (today - timedelta(days=14)).strftime('%Y-%m-%dT%H:%M:%S'),
+        "to_date": (today - timedelta(days=8)).strftime('%Y-%m-%dT%H:%M:%S')
+    },
+    # 3주차 (15일 전 ~ 21일 전)
+    {
+        "from_date": (today - timedelta(days=21)).strftime('%Y-%m-%dT%H:%M:%S'),
+        "to_date": (today - timedelta(days=15)).strftime('%Y-%m-%dT%H:%M:%S')
+    },
+    # 4주차 (22일 전 ~ 28일 전)
+    {
+        "from_date": (today - timedelta(days=28)).strftime('%Y-%m-%dT%H:%M:%S'),
+        "to_date": (today - timedelta(days=22)).strftime('%Y-%m-%dT%H:%M:%S')
+    }
+]
+
 class Config:
     NEWS_API_KEY = os.getenv('NEWS_API_KEY', 'YOUR_NEWS_API_KEY_DEFAULT')
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'YOUR_GEMINI_API_KEY_DEFAULT')
-
-    # --- (핵심 수정 1) 날짜 범위 정의를 클래스 내부로 이동 ---
-    today = datetime.now()
-    DATE_RANGES_TO_SCAN = [
-        {"from_date": (today - timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%S'), "to_date": today.strftime('%Y-%m-%dT%H:%M:%S')},
-        {"from_date": (today - timedelta(days=14)).strftime('%Y-%m-%dT%H:%M:%S'), "to_date": (today - timedelta(days=8)).strftime('%Y-%m-%dT%H:%M:%S')},
-        {"from_date": (today - timedelta(days=21)).strftime('%Y-%m-%dT%H:%M:%S'), "to_date": (today - timedelta(days=15)).strftime('%Y-%m-%dT%H:%M:%S')},
-        {"from_date": (today - timedelta(days=28)).strftime('%Y-%m-%dT%H:%M:%S'), "to_date": (today - timedelta(days=22)).strftime('%Y-%m-%dT%H:%M:%S')}
-    ]
-    
-    # --- (핵심 수정 2) PAGE_LIMIT 정의를 클래스 내부에 유지 ---
-    PAGE_LIMIT = int(os.getenv('PAGE_LIMIT', 2)) # 각 쿼리+날짜 범위당 최대 2페이지까지 수집
 
     # News API Parameters
     QUERIES = [
@@ -46,6 +61,7 @@ class Config:
 
     SORT_BY = os.getenv('NEWS_SORT_BY', 'publishedAt')
     PAGE_SIZE = int(os.getenv('NEWS_PAGE_SIZE', 100))
+    PAGE_LIMIT = int(os.getenv('PAGE_LIMIT', 2)) # 각 쿼리+날짜 범위당 최대 2페이지까지 수집
 
     # File Paths
     SAVE_FOLDER_PATH = os.path.join(CURRENT_DIR, 'articles')

@@ -5,7 +5,7 @@ import os
 import glob
 import logging
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# from concurrent.futures import ThreadPoolExecutor, as_completed # 더 이상 사용하지 않음
 from tqdm import tqdm
 
 # 상대 경로로 모듈 임포트
@@ -32,11 +32,8 @@ def process_row_to_labeled_pair(row):
         'label': 1  # 진짜 뉴스는 1
     }
 
-    # --- (핵심 수정 3) ---
-    # 'generate_fake_version'이 (제목, 본문)을 반환
-    fake_title, fake_text = generate_fake_version(real_text)
-    
     # '가짜' 데이터 레코드 생성 (라벨 0)
+    fake_title, fake_text = generate_fake_version(real_text)
     record_fake = {
         'title': fake_title, # Gemini가 생성한 제목
         'source': row['출처'],
@@ -81,18 +78,25 @@ def main():
 
     processed_articles = []
     
-    # 2. DataFrame의 각 행을 병렬로 처리
+    # 2. DataFrame의 각 행을 병렬 처리 (ThreadPoolExecutor) 대신 순차 처리로 변경
     rows_to_process = df.to_dict('records')
     
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        future_to_row = {executor.submit(process_row_to_labeled_pair, row): row for row in rows_to_process}
-        
-        for future in tqdm(as_completed(future_to_row), total=len(rows_to_process), desc="LLM 가공 처리 중"):
-            try:
-                processed_articles.extend(future.result())
-            except Exception as e:
-                row_title = future_to_row[future].get('title', '알 수 없음')
-                logging.error(f"'{row_title}' 기사 가공 중 예외 발생: {e}", exc_info=True)
+    logging.info(f"총 {len(rows_to_process)}개의 기사를 1개씩 순차적으로 처리합니다 (1분/2개 한도 준수).")
+    
+    # *** (핵심 수정!) ***
+    # ThreadPoolExecutor를 제거하고, tqdm이 적용된 단순 for 반복문으로 변경
+    for row in tqdm(rows_to_process, desc="LLM 가공 처리 중"):
+        try:
+            # 1분에 2개 한도를 준수하기 위해, 각 기사 처리 후 31초 대기
+            # (2개 처리 시 약 62초 소요)
+            processed_articles.extend(process_row_to_labeled_pair(row))
+            time.sleep(31) # 1분에 2개 한도를 위한 31초 대기
+        except Exception as e:
+            row_title = row.get('title', '알 수 없음')
+            logging.error(f"'{row_title}' 기사 가공 중 예외 발생: {e}", exc_info=True)
+            # 한 기사에서 오류가 나도 다음 기사로 넘어가도록 continue
+            continue
+    # *** (수정 끝) ***
 
     processed_articles.sort(key=lambda x: x.get('publishedAt', ''), reverse=True)
     

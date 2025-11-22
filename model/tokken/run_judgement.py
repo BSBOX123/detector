@@ -62,7 +62,7 @@ def judge_article(news_text):
     }
 
 def main():
-    print("--- 📰 [Tokken] 텍스트 기반 판별기 시작 ---")
+    print("--- [Tokken] 텍스트 기반 판별기 시작 ---")
     print("분석할 뉴스 본문을 입력해주세요 (입력 완료 후 엔터를 두 번 누르세요)")
     
     try:
